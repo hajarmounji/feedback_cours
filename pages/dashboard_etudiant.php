@@ -13,8 +13,7 @@ $prenom = $_SESSION['prenom'] ?? 'Étudiant';
 $nom = $_SESSION['nom'] ?? '';
 $filiere = $_SESSION['filiere'] ?? '';
 $annee = $_SESSION['annee'] ?? '';
-
-
+$photo_profil = $_SESSION['photo_profil'] ?? '';
 
 // Modification du mot de passe
 if (isset($_POST['update_password'])) {
@@ -74,6 +73,7 @@ if (isset($_POST['add_feedback'])) {
         }
     }
 }
+
 // Supprimer un feedback
 if (isset($_POST['delete_feedback'])) {
     $id_cours = (int)$_POST['id_cours'];
@@ -82,7 +82,6 @@ if (isset($_POST['delete_feedback'])) {
     $stmt->execute([$id_etudiant, $id_cours]);
     $success = "✅ Votre commentaire a été supprimé !";
     
-    // Rediriger pour éviter la double soumission
     header("Location: dashboard_etudiant.php");
     exit();
 }
@@ -94,8 +93,7 @@ $stmt = $pdo->prepare("
            (SELECT commentaire FROM feedback WHERE id_etudiant = ? AND id_cours = c.id_cours LIMIT 1) as mon_commentaire,
            (SELECT note FROM feedback WHERE id_etudiant = ? AND id_cours = c.id_cours LIMIT 1) as ma_note,
            (SELECT COUNT(*) FROM feedback WHERE id_cours = c.id_cours) as total_feedbacks,
-           (SELECT AVG(note) FROM feedback WHERE id_cours = c.id_cours) as note_moyenne,
-           CASE WHEN c.contenu IS NOT NULL AND LENGTH(c.contenu) > 100 THEN 1 ELSE 0 END as a_pdf
+           (SELECT AVG(note) FROM feedback WHERE id_cours = c.id_cours) as note_moyenne
     FROM cours c
     LEFT JOIN enseignant e ON c.id_enseignant = e.id_enseignant
     ORDER BY c.date_cours DESC
@@ -108,6 +106,13 @@ $stmt = $pdo->prepare("SELECT COUNT(*) as total FROM feedback WHERE id_etudiant 
 $stmt->execute([$id_etudiant]);
 $stats = $stmt->fetch();
 $total_feedbacks_given = $stats['total'] ?? 0;
+
+// Fonction utilitaire : détecter si le contenu est un PDF
+function isPdfContent($data) {
+    if (!$data || !is_string($data) || strlen($data) < 5) return false;
+    $header = substr($data, 0, 5);
+    return $header === '%PDF-' || strpos($data, '%PDF') === 0;
+}
 ?>
 <!DOCTYPE html>
 <html lang="fr">
@@ -125,7 +130,8 @@ $total_feedbacks_given = $stats['total'] ?? 0;
         .sidebar-header { padding: 25px 20px; border-bottom: 1px solid rgba(255,255,255,0.1); text-align: center; }
         .sidebar-logo { font-size: 24px; font-weight: bold; margin-bottom: 5px; display: flex; align-items: center; justify-content: center; gap: 10px; }
         .sidebar-user { display: flex; align-items: center; gap: 12px; margin-top: 20px; padding: 12px; background: rgba(255,255,255,0.1); border-radius: 10px; }
-        .sidebar-avatar { width: 40px; height: 40px; border-radius: 50%; background: white; color: #1e3c72; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 16px; flex-shrink: 0; }
+        .sidebar-avatar { width: 40px; height: 40px; border-radius: 50%; background: white; color: #1e3c72; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 16px; flex-shrink: 0; overflow: hidden; }
+        .sidebar-avatar img { width: 100%; height: 100%; object-fit: cover; }
         .sidebar-user-info { overflow: hidden; text-align: left; }
         .sidebar-user-name { font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .sidebar-user-role { font-size: 11px; opacity: 0.9; }
@@ -178,7 +184,7 @@ $total_feedbacks_given = $stats['total'] ?? 0;
         .alert-error { background: #ffebee; color: #c62828; border: 1px solid #ffcdd2; }
         
         /* COURSE CARD */
-        .course-card { background: white; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); overflow: hidden; transition: all 0.3s ease; margin-bottom: 24px; }
+        .course-card { background: white; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); overflow: hidden; transition: all 0.3s ease; margin-bottom: 24px; position: relative; }
         .course-card:hover { transform: translateY(-4px); box-shadow: 0 12px 40px rgba(30,60,114,0.15); }
         .course-header { padding: 16px 20px; background: linear-gradient(135deg, #f8fafc, #f1f5f9); border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
         .course-prof { display: flex; align-items: center; gap: 12px; }
@@ -188,8 +194,6 @@ $total_feedbacks_given = $stats['total'] ?? 0;
         .course-badge { background: linear-gradient(135deg, #1e3c72, #2a5298); color: white; padding: 6px 14px; border-radius: 20px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
         .course-title { padding: 18px 20px 12px; font-size: 17px; font-weight: 700; color: #1e293b; border-bottom: 1px solid #f1f5f9; }
         .course-body { padding: 16px 20px; font-size: 14px; line-height: 1.7; color: #475569; }
-        .pdf-bar { padding: 14px 20px; background: linear-gradient(135deg, #fef2f2, #fee2e2); border-top: 1px solid #fecaca; border-bottom: 1px solid #fecaca; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
-        .btn-pdf { background: linear-gradient(135deg, #ef4444, #dc2626); color: white; border: none; padding: 9px 18px; border-radius: 25px; font-size: 12px; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
         .course-meta { padding: 14px 20px; background: #f8fafc; border-top: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #64748b; }
         .course-stats { display: flex; align-items: center; gap: 16px; }
         .feedback-form { padding: 18px 20px 20px; display: flex; flex-direction: column; gap: 14px; }
@@ -208,96 +212,32 @@ $total_feedbacks_given = $stats['total'] ?? 0;
             .menu-toggle { display: block; }
             .container { padding: 18px; }
         }
-        /* Bouton PDF en haut à gauche */
-        .course-card {position: relative;}
-        .pdf-corner {position: absolute; top: 15px; left: 15px; z-index: 10;}
-        .btn-pdf-small {background: #ef4444;color: white;padding: 5px 12px;border-radius: 20px;text-decoration: none;font-size: 12px;font-weight: 600;display: inline-flex;align-items: center;gap: 6px;transition: all 0.2s;box-shadow: 0 2px 5px rgba(0,0,0,0.1);}
-        .btn-pdf-small:hover {background: #dc2626;transform: translateY(-1px);}
-
-        /* Layout avec calendrier à droite */
-.dashboard-wrapper {
-    display: flex;
-    gap: 30px;
-    padding: 25px 30px;
-}
-
-.main-content-area {
-    flex: 2;
-    min-width: 0;
-}
-
-.sidebar-calendar {
-    flex: 1;
-    min-width: 280px;
-}
-
-.calendar-card {
-    background: white;
-    border-radius: 16px;
-    padding: 20px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-    
-}
-
-.calendar-header {
-    text-align: center;
-    margin-bottom: 20px;
-}
-
-.calendar-nav {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-top: 10px;
-}
-
-.calendar-nav button {
-    background: #1e3c72;
-    color: white;
-    border: none;
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    cursor: pointer;
-}
-
-#calendar {
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    gap: 5px;
-    text-align: center;
-}
-
-.weekday {
-    font-size: 12px;
-    font-weight: bold;
-    padding: 8px 0;
-}
-
-.calendar-day {
-    padding: 8px 0;
-    border-radius: 8px;
-    cursor: pointer;
-}
-
-.calendar-day:hover {
-    background: #e3f2fd;
-}
-
-.calendar-day.today {
-    background: #1e3c72;
-    color: white;
-}
-
-.calendar-day.other-month {
-    color: #ccc;
-}
-
-@media (max-width: 992px) {
-    .dashboard-wrapper {
-        flex-direction: column;
-    }
-}
+        
+        /* Bouton PDF */
+        .btn-pdf-small { background: #ef4444; color: white; padding: 5px 12px; border-radius: 20px; text-decoration: none; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .btn-pdf-small:hover { background: #dc2626; transform: translateY(-1px); }
+        
+        /* PDF Viewer */
+        .pdf-viewer { width: 100%; height: 400px; border: 1px solid #e2e8f0; border-radius: 8px; margin-top: 10px; }
+        
+        /* Layout avec calendrier */
+        .dashboard-wrapper { display: flex; gap: 30px; padding: 25px 30px; }
+        .main-content-area { flex: 2; min-width: 0; }
+        .sidebar-calendar { flex: 1; min-width: 280px; }
+        .calendar-card { background: white; border-radius: 16px; padding: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+        .calendar-header { text-align: center; margin-bottom: 20px; }
+        .calendar-nav { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
+        .calendar-nav button { background: #1e3c72; color: white; border: none; width: 30px; height: 30px; border-radius: 50%; cursor: pointer; }
+        #calendar { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; text-align: center; }
+        .weekday { font-size: 12px; font-weight: bold; padding: 8px 0; }
+        .calendar-day { padding: 8px 0; border-radius: 8px; cursor: pointer; }
+        .calendar-day:hover { background: #e3f2fd; }
+        .calendar-day.today { background: #1e3c72; color: white; }
+        .calendar-day.other-month { color: #ccc; }
+        
+        @media (max-width: 992px) {
+            .dashboard-wrapper { flex-direction: column; }
+        }
     </style>
 </head>
 <body>
@@ -309,7 +249,13 @@ $total_feedbacks_given = $stats['total'] ?? 0;
                 <span>EduPro</span>
             </div>
             <div class="sidebar-user">
-                <div class="sidebar-avatar"><?php if(!empty($photo_profil) && file_exists($photo_profil)): ?><img src="../<?= htmlspecialchars($photo_profil) ?>" style="width:40px;height:40px;border-radius:50%;object-fit:cover;"><?php else: ?><?= strtoupper(substr($prenom, 0, 1)) ?><?php endif; ?></div>
+                <div class="sidebar-avatar">
+                    <?php if(!empty($photo_profil) && file_exists(__DIR__ . '/../' . $photo_profil)): ?>
+                        <img src="../<?= htmlspecialchars($photo_profil) ?>" alt="Photo">
+                    <?php else: ?>
+                        <?= strtoupper(substr($prenom, 0, 1)) ?>
+                    <?php endif; ?>
+                </div>
                 <div class="sidebar-user-info">
                     <div class="sidebar-user-name"><?= htmlspecialchars($prenom . ' ' . $nom) ?></div>
                     <div class="sidebar-user-role"><?= htmlspecialchars($filiere) ?> • Année <?= htmlspecialchars($annee) ?></div>
@@ -357,13 +303,12 @@ $total_feedbacks_given = $stats['total'] ?? 0;
                      <i class="fas fa-check-circle"></i> <?= htmlspecialchars($success) ?>
                 </div>
                 <script>
-                    // Disparaît après 3 secondes
                     setTimeout(function() {
-                     var msg = document.getElementById('successMessage');
-                    if(msg) msg.style.display = 'none';
+                        var msg = document.getElementById('successMessage');
+                        if(msg) msg.style.display = 'none';
                     }, 1500);
-                 </script>
-                <?php unset($success); // Supprime la variable après affichage ?>
+                </script>
+                <?php unset($success); ?>
             <?php endif; ?>
 
             <!-- SECTION PROFIL -->
@@ -373,13 +318,13 @@ $total_feedbacks_given = $stats['total'] ?? 0;
                         <h3 class="card-title"><i class="fas fa-user"></i> Mon Profil</h3>
                     </div>
                     <div style="display: flex; align-items: center; gap: 20px; margin-bottom: 25px;">
-                        <div style="width: 80px; height: 80px; border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; font-size: 32px; overflow: hidden;">
-    <?php if(!empty($photo_profil) && file_exists($photo_profil)): ?>
-        <img src="../<?= htmlspecialchars($photo_profil) ?>" style="width:100%;height:100%;object-fit:cover;">
-    <?php else: ?>
-        <?= strtoupper(substr($prenom, 0, 1)) ?>
-    <?php endif; ?>
-</div>
+                        <div class="sidebar-avatar" style="width: 80px; height: 80px; font-size: 32px;">
+                            <?php if(!empty($photo_profil) && file_exists(__DIR__ . '/../' . $photo_profil)): ?>
+                                <img src="../<?= htmlspecialchars($photo_profil) ?>" alt="Photo" style="width:100%;height:100%;object-fit:cover;">
+                            <?php else: ?>
+                                <?= strtoupper(substr($prenom, 0, 1)) ?>
+                            <?php endif; ?>
+                        </div>
                         <div>
                             <h3 style="font-size: 20px; margin-bottom: 5px;"><?= htmlspecialchars($prenom . ' ' . $nom) ?></h3>
                             <p style="color: #666;"><?= htmlspecialchars($filiere) ?> • Année <?= htmlspecialchars($annee) ?></p>
@@ -436,6 +381,11 @@ $total_feedbacks_given = $stats['total'] ?? 0;
                     <?php foreach($cours_list as $cours): 
                         $a_feedback = !empty($cours['mon_commentaire']);
                         $ma_note = $cours['ma_note'] ?? 0;
+                        
+                        // Détection PDF
+                        $contenu = $cours['contenu'] ?? null;
+                        $is_pdf = isPdfContent($contenu);
+                        $has_content = !empty($contenu);
                     ?>
                     <div class="course-card">
                         <div class="course-header">
@@ -447,22 +397,51 @@ $total_feedbacks_given = $stats['total'] ?? 0;
                                 </div>
                             </div>
                             <div style="display: flex; gap: 10px; align-items: center;">
-                                 <?php if(!empty($cours['a_pdf'])): ?>
-                                 <a href="telecharger.php?id=<?= $cours['id_cours'] ?>" target="_blank" class="btn-pdf-small">
-                                <i class="fas fa-file-pdf"></i> PDF
+                                <?php if($is_pdf): ?>
+                                <a href="telecharger.php?id=<?= $cours['id_cours'] ?>" target="_blank" class="btn-pdf-small">
+                                    <i class="fas fa-file-pdf"></i> Télécharger PDF
                                 </a>
-                                 <?php endif; ?>
+                                <?php endif; ?>
                                 <span class="course-badge"><?= htmlspecialchars($cours['module']) ?></span>
                             </div>
                         </div>
 
-                        
-                        <!-- Titre du cours -->
                         <h3 class="course-title"><?= htmlspecialchars($cours['titre']) ?></h3>
 
-                        <!-- Contenu du cours -->
+                        <!-- Contenu du cours : gestion LONGBLOB PDF -->
                         <div class="course-body">
-                               <?= nl2br(htmlspecialchars($cours['contenu'] ?? '')) ?>
+                            <?php if($is_pdf): ?>
+                                <!-- Affichage pour fichier PDF -->
+                                <div style="text-align: center; padding: 20px; background: #f8fafc; border-radius: 10px; margin-bottom: 15px;">
+                                    <i class="fas fa-file-pdf" style="font-size: 48px; color: #ef4444; margin-bottom: 10px;"></i>
+                                    <p style="color: #475569; margin-bottom: 15px;">
+                                        <strong>Document PDF disponible</strong><br>
+                                        <small>Cliquez sur le bouton ci-dessus pour le télécharger</small>
+                                    </p>
+                                    
+                                    <!-- Optionnel : aperçu intégré -->
+                                    <details style="margin-top: 10px;">
+                                        <summary style="cursor: pointer; color: #1e3c72; font-weight: 500;">
+                                            <i class="fas fa-eye"></i> Voir un aperçu
+                                        </summary>
+                                        <embed 
+                                            src="telecharger.php?id=<?= $cours['id_cours'] ?>#view=FitH" 
+                                            type="application/pdf" 
+                                            class="pdf-viewer"
+                                        />
+                                    </details>
+                                </div>
+                                
+                            <?php elseif($has_content): ?>
+                                <!-- Affichage pour texte simple -->
+                                <?= nl2br(htmlspecialchars($contenu)) ?>
+                                
+                            <?php else: ?>
+                                <!-- Aucun contenu -->
+                                <p style="color: #64748b; font-style: italic;">
+                                    <i class="fas fa-info-circle"></i> Aucune description ou document disponible pour ce cours.
+                                </p>
+                            <?php endif; ?>
                         </div>
 
                         <div class="course-meta">
@@ -473,7 +452,6 @@ $total_feedbacks_given = $stats['total'] ?? 0;
                             </div>
                         </div>
 
-                        <!-- Formulaire feedback -->
                         <form method="POST" class="feedback-form">
                             <input type="hidden" name="id_cours" value="<?= $cours['id_cours'] ?>">
                             
@@ -520,7 +498,7 @@ $total_feedbacks_given = $stats['total'] ?? 0;
                     
                     <?php
                     $stmt_my_fb = $pdo->prepare("
-                        SELECT f.*, c.nom_cours, c.module, c.titre
+                        SELECT f.*, c.titre as nom_cours, c.module
                         FROM feedback f
                         JOIN cours c ON f.id_cours = c.id_cours
                         WHERE f.id_etudiant = ?
@@ -543,7 +521,6 @@ $total_feedbacks_given = $stats['total'] ?? 0;
                                 <strong style="color: #1e3c72;"><?= htmlspecialchars($fb['nom_cours']) ?></strong>
                                 <span style="background:#1e3c72; color:white; padding:2px 10px; border-radius:12px; font-size:11px;"><?= htmlspecialchars($fb['module']) ?></span>
                             </div>
-                            <div style="font-size: 13px; color: #666; margin-bottom: 10px;"><?= htmlspecialchars($fb['titre']) ?></div>
                             <div style="font-size: 14px; color: #333; line-height: 1.5; margin-bottom: 10px;"><?= nl2br(htmlspecialchars($fb['commentaire'])) ?></div>
                             <div style="display: flex; gap: 15px; font-size: 12px;">
                                 <span style="color: #f59e0b;"><?= str_repeat('★', (int)$fb['note']) ?> <?= $fb['note'] ?>/5</span>
@@ -556,92 +533,108 @@ $total_feedbacks_given = $stats['total'] ?? 0;
             </section>
 
         </div>
-            <!-- Calendrier à droite -->
-            <div class="sidebar-calendar">
-                <div class="calendar-card">
-                    <div class="calendar-header">
-                        <h3><i class="fas fa-calendar-alt"></i> Calendrier</h3>
-                        <div class="calendar-nav">
-                            <button id="prevMonth"><i class="fas fa-chevron-left"></i></button>
-                            <span id="monthYear"></span>
-                            <button id="nextMonth"><i class="fas fa-chevron-right"></i></button>
-                        </div>
+        
+        <!-- Calendrier à droite -->
+        <div class="sidebar-calendar">
+            <div class="calendar-card">
+                <div class="calendar-header">
+                    <h3><i class="fas fa-calendar-alt"></i> Calendrier</h3>
+                    <div class="calendar-nav">
+                        <button id="prevMonth"><i class="fas fa-chevron-left"></i></button>
+                        <span id="monthYear"></span>
+                        <button id="nextMonth"><i class="fas fa-chevron-right"></i></button>
                     </div>
-                    <div id="calendar"></div>
                 </div>
+                <div id="calendar"></div>
             </div>
-        </div> 
+        </div>
+    </div>
     </main>
-    
 
     <script>
+        // Calendrier
+        (function() {
+            let currentDate = new Date();
+            
+            function renderCalendar() {
+                const year = currentDate.getFullYear();
+                const month = currentDate.getMonth();
+                
+                const firstDay = new Date(year, month, 1);
+                const lastDay = new Date(year, month + 1, 0);
+                const startDayOfWeek = firstDay.getDay();
+                const daysInMonth = lastDay.getDate();
+                
+                const monthNames = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 
+                                   'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+                document.getElementById('monthYear').textContent = `${monthNames[month]} ${year}`;
+                
+                let calendarHtml = '';
+                const weekDays = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+                weekDays.forEach(day => {
+                    calendarHtml += `<div class="weekday">${day}</div>`;
+                });
+                
+                let startOffset = startDayOfWeek === 0 ? 6 : startDayOfWeek - 1;
+                
+                const prevMonthLastDay = new Date(year, month, 0).getDate();
+                for (let i = startOffset - 1; i >= 0; i--) {
+                    calendarHtml += `<div class="calendar-day other-month">${prevMonthLastDay - i}</div>`;
+                }
+                
+                const today = new Date();
+                const isCurrentMonth = today.getMonth() === month && today.getFullYear() === year;
+                
+                for (let day = 1; day <= daysInMonth; day++) {
+                    const isToday = isCurrentMonth && day === today.getDate();
+                    calendarHtml += `<div class="calendar-day ${isToday ? 'today' : ''}">${day}</div>`;
+                }
+                
+                const totalDisplayed = startOffset + daysInMonth;
+                for (let day = 1; day <= 42 - totalDisplayed; day++) {
+                    calendarHtml += `<div class="calendar-day other-month">${day}</div>`;
+                }
+                
+                document.getElementById('calendar').innerHTML = calendarHtml;
+            }
+            
+            document.getElementById('prevMonth').addEventListener('click', () => {
+                currentDate.setMonth(currentDate.getMonth() - 1);
+                renderCalendar();
+            });
+            
+            document.getElementById('nextMonth').addEventListener('click', () => {
+                currentDate.setMonth(currentDate.getMonth() + 1);
+                renderCalendar();
+            });
+            
+            renderCalendar();
+        })();
 
-// Calendrier
-(function() {
-    let currentDate = new Date();
-    
-    function renderCalendar() {
-        const year = currentDate.getFullYear();
-        const month = currentDate.getMonth();
-        
-        const firstDay = new Date(year, month, 1);
-        const lastDay = new Date(year, month + 1, 0);
-        const startDayOfWeek = firstDay.getDay();
-        const daysInMonth = lastDay.getDate();
-        
-        const monthNames = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 
-                           'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
-        document.getElementById('monthYear').textContent = `${monthNames[month]} ${year}`;
-        
-        let calendarHtml = '';
-        const weekDays = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
-        weekDays.forEach(day => {
-            calendarHtml += `<div class="weekday">${day}</div>`;
-        });
-        
-        let startOffset = startDayOfWeek === 0 ? 6 : startDayOfWeek - 1;
-        
-        const prevMonthLastDay = new Date(year, month, 0).getDate();
-        for (let i = startOffset - 1; i >= 0; i--) {
-            calendarHtml += `<div class="calendar-day other-month">${prevMonthLastDay - i}</div>`;
-        }
-        
-        const today = new Date();
-        const isCurrentMonth = today.getMonth() === month && today.getFullYear() === year;
-        
-        for (let day = 1; day <= daysInMonth; day++) {
-            const isToday = isCurrentMonth && day === today.getDate();
-            calendarHtml += `<div class="calendar-day ${isToday ? 'today' : ''}">${day}</div>`;
-        }
-        
-        const totalDisplayed = startOffset + daysInMonth;
-        for (let day = 1; day <= 42 - totalDisplayed; day++) {
-            calendarHtml += `<div class="calendar-day other-month">${day}</div>`;
-        }
-        
-        document.getElementById('calendar').innerHTML = calendarHtml;
-    }
-    
-    document.getElementById('prevMonth').addEventListener('click', () => {
-        currentDate.setMonth(currentDate.getMonth() - 1);
-        renderCalendar();
-    });
-    
-    document.getElementById('nextMonth').addEventListener('click', () => {
-        currentDate.setMonth(currentDate.getMonth() + 1);
-        renderCalendar();
-    });
-    
-    renderCalendar();
-})();
+        // Navigation entre sections
         function showSection(sectionName, btn) {
             document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
             document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('active'));
-            document.getElementById(sectionName).classList.add('active');
+            
+            const section = document.getElementById(sectionName);
+            if(section) section.classList.add('active');
             if(btn) btn.classList.add('active');
-            const titles = { 'feed': 'Mes Cours', 'profile': 'Mon Profil', 'my-feedbacks': 'Mes Feedbacks' };
+            
+            const titles = {
+                'feed': 'Mes Cours',
+                'profile': 'Mon Profil', 
+                'my-feedbacks': 'Mes Feedbacks'
+            };
             document.getElementById('page-title').textContent = titles[sectionName] || 'Dashboard';
-            if(window.innerWidth <= 768) document.getElementById('sidebar').classList.remove('active');
+            
+            const calendar = document.querySelector('.sidebar-calendar');
+            if(calendar) {
+                calendar.style.display = (sectionName === 'feed' || sectionName === 'my-feedbacks') ? 'block' : 'none';
+            }
+            
+            if(window.innerWidth <= 768) {
+                document.getElementById('sidebar').classList.remove('active');
+            }
         }
 
         function toggleSidebar() {
@@ -651,36 +644,6 @@ $total_feedbacks_given = $stats['total'] ?? 0;
         document.addEventListener('DOMContentLoaded', function() {
             showSection('feed', document.querySelector('.menu-item.active'));
         });
-        window.showSection = function(sectionName, btn) {
-    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-    document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('active'));
-    
-    const section = document.getElementById(sectionName);
-    if(section) section.classList.add('active');
-    if(btn) btn.classList.add('active');
-    
-    const titles = {
-        'feed': 'Mes Cours',
-        'profile': 'Mon Profil', 
-        'my-feedbacks': 'Mes Feedbacks'
-    };
-    document.getElementById('page-title').textContent = titles[sectionName] || 'Dashboard';
-    
-    // ✅ Gestion de l'affichage du calendrier
-    const calendar = document.querySelector('.sidebar-calendar');
-    if(calendar) {
-        // Afficher sur Accueil (feed) ET Mes Feedbacks (my-feedbacks)
-        if(sectionName === 'feed' || sectionName === 'my-feedbacks') {
-            calendar.style.display = 'block';
-        } else {
-            calendar.style.display = 'none';
-        }
-    }
-    
-    if(window.innerWidth <= 768) {
-        document.getElementById('sidebar').classList.remove('active');
-    }
-};
     </script>
 </body>
 </html>
