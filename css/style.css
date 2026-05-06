@@ -1,0 +1,35 @@
+/* css/style.css - Styles communs */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Inter', sans-serif; background: #f5f7fa; color: #1e293b; }
+
+.container { max-width: 1200px; margin: 0 auto; padding: 0 20px; }
+
+/* Alertes */
+.alert { padding: 12px 20px; border-radius: 10px; margin-bottom: 20px; }
+.alert-error { background: #ffebee; color: #c62828; border: 1px solid #ffcdd2; }
+.alert-success { background: #e8f5e9; color: #2e7d32; border: 1px solid #c8e6c9; }
+
+/* Boutons */
+.btn { display: inline-block; padding: 10px 20px; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; text-decoration: none; transition: all 0.3s; }
+.btn-primary { background: linear-gradient(135deg, #1e3c72, #2a5298); color: white; }
+.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(30,60,114,0.3); }
+.btn-block { display: block; width: 100%; text-align: center; }
+
+/* Formulaire */
+.form-group { margin-bottom: 20px; }
+.form-group label { display: block; margin-bottom: 8px; font-weight: 500; }
+.form-group input, .form-group select, .form-group textarea { width: 100%; padding: 12px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 14px; }
+.form-group input:focus { outline: none; border-color: #1e3c72; }
+
+/* Page de connexion */
+.login-page { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #1e3c72, #2a5298); padding: 20px; }
+.login-container { background: white; border-radius: 20px; max-width: 450px; width: 100%; overflow: hidden; }
+.login-header { background: linear-gradient(135deg, #1e3c72, #2a5298); color: white; padding: 40px; text-align: center; }
+.login-header i { font-size: 60px; margin-bottom: 15px; }
+.login-header h2 { font-size: 28px; }
+.login-body { padding: 30px; }
+.login-footer { text-align: center; margin-top: 20px; padding-top: 20px; border-top: 1px solid #eee; }
+.login-footer a { color: #1e3c72; text-decoration: none; }
+
+/* Responsive */
+@media (max-width: 768px) { .login-header { padding: 30px; } .login-body { padding: 20px; } }
